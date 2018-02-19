@@ -1,14 +1,10 @@
 import Transport from "winston-transport";
-import { KafkaClient, HighLevelProducer } from "kafka-node";
 import { LEVEL, MESSAGE } from "triple-beam";
-
-const noop = () => {};
+import promisify from "promisify-node";
 
 const defaults = {
-  name: "Winston3KafkaLogger",
   numPerBatch: 1,
-  host: "localhost:9092",
-  clientId: "winston3-kafka",
+  maxPayloads: 1024,
   topic: "winston-logs",
 };
 
@@ -20,39 +16,34 @@ class KafkaTransport extends Transport {
 
     this.payloads = [];
     this.numPerBatch = opts.numPerBatch;
-    this.name = opts.name;
-    this.host = opts.host;
     this.topic = opts.topic;
-    this.clientId = opts.clientId;
-    this.connected = false;
-    this.client = new KafkaClient({ kafkaHost: this.host, clientId: this.clientId });
-    this.producer = new HighLevelProducer(this.client);
-    this.producer
-      .on("ready", () => {
-        this.connected = true;
-      })
-      .on("error", err => {
-        this.connected = false;
-        console.log(err);
-        throw new Error("Cannot connect to Kafka server");
-      });
+    this.maxPayloads = opts.maxPayloads;
+    this.producer = opts.producer;
+    this.send = promisify(this.producer.send).bind(this.producer);
   }
 
-  addPayload(message) {
-    this.payloads.push({ topic: this.topic, messages: [message] });
+  addPayload(payload) {
+    if (this.payloads.length > this.maxPayloads) {
+      console.log("Error: payload buffer exceeded");
+      return;
+    }
+
+    this.payloads.push(payload);
+  }
+
+  addMessage(message) {
+    this.addPayload({ topic: this.topic, messages: [message] });
   }
 
   processPayloads() {
-    console.log(this.connected);
-    if (this.connected && this.payloads.length >= this.numPerBatch) {
+    if (this.payloads.length >= this.numPerBatch) {
       const payloads = this.payloads;
       this.clearPayloads();
 
-      try {
-        this.producer.send(payloads, noop);
-      } catch (err) {
+      this.send(payloads).catch(err => {
         console.log(err);
-      }
+        payloads.forEach(payload => this.addPayload({ topic: payload.topic, messages: payload.messages }));
+      });
     }
   }
 
@@ -65,7 +56,7 @@ class KafkaTransport extends Transport {
       this.emit("logged", info);
     });
 
-    this.addPayload(info[MESSAGE]);
+    this.addMessage(info[MESSAGE]);
 
     this.processPayloads();
 
