@@ -1,6 +1,6 @@
 import Transport from "winston-transport";
 import { LEVEL, MESSAGE } from "triple-beam";
-import promisify from "promisify-node";
+import { promisify } from "util";
 
 const defaults = {
   numPerBatch: 1,

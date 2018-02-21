@@ -19,9 +19,8 @@
     "babel-preset-env": "1.6.1"
   },
   "dependencies": {
-    "promisify-node": "^0.4.0",
-    "triple-beam": "^1.1.0",
-    "winston-transport": "^3.0.1"
+    "triple-beam": "1.1.0",
+    "winston-transport": "3.0.1"
   },
   "babel": {
     "presets": [
